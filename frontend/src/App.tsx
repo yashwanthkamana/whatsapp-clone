@@ -1,29 +1,32 @@
-import React, { useEffect } from "react";
-import { RecoilRoot } from "recoil";
+import { useRecoilState } from "recoil";
+import Chat from "./pages/Chat";
+import Singin from "./pages/Singin";
+import useAuthObserver from "./utils/authObserver";
+import { globalUserState } from "./recoil/atoms";
+import { auth } from "./firebase";
+import { useEffect } from "react";
 
 function App() {
-  let ws: WebSocket | null = null;
-  let textEncoder = new TextEncoder();
-  let textDecoder = new TextDecoder();
+  const [user, setGlobalUser] = useRecoilState(globalUserState)
+
   useEffect(() => {
-    ws = new WebSocket("ws://localhost:8080/chat");
-    ws.onopen = () => console.log("connected");
+    auth.onAuthStateChanged(currentUser => {
+      if (currentUser) {
+        console.log("changed to ", currentUser.displayName);
 
-    return () => {
-      ws!.onclose = () => console.log("disconnected");
-    };
-  }, []);
-  const sendMessage = () => {
-    console.log(textEncoder.encode());
+        setGlobalUser({ uid: currentUser.uid, displayName: currentUser.displayName })
+      } else {
+        console.log("logout");
 
-    ws?.send(JSON.stringify({ name: "yash", message: "hi" }));
-  };
-  return (
-    <RecoilRoot>
-      <div className="text-3xl">hello</div>
-      <button onClick={sendMessage}>send</button>
-    </RecoilRoot>
-  );
+        setGlobalUser(null)
+      }
+    })
+  }, [])
+
+
+  if (user?.uid) return <Chat />
+
+  return <Singin />
 }
 
 export default App;
