@@ -3,6 +3,7 @@ import { auth } from "../firebase";
 import { User } from "firebase/auth";
 import {
   TYPE_PEER_CHAT,
+  TYPE_PEER_DISCONNECT,
   TYPE_PEER_INFO,
   TYPE_REGISTER,
 } from "../utils/constants";
@@ -23,6 +24,13 @@ const Chat = (props: Props) => {
   const [activeChat, setActiveChat] = useState<Partial<User> | null>(null);
   const globalUser = useRecoilValue(globalUserState);
   const handleLogout = async () => {
+    webSocket?.send(
+      JSON.stringify({
+        type: TYPE_PEER_DISCONNECT,
+        id: globalUser?.uid,
+        // name: globalUser?.displayName,
+      })
+    );
     await auth.signOut();
   };
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
@@ -31,9 +39,14 @@ const Chat = (props: Props) => {
   useEffect(() => {
     let ws = new WebSocket("ws://localhost:8080/chat");
     setWebSocket(ws);
-    ws.onopen = () => {
+    return () => {
+      ws!.onclose = () => console.log("disconnected");
+    };
+  }, []);
+  if (webSocket) {
+    webSocket.onopen = () => {
       console.log("connected");
-      ws?.send(
+      webSocket?.send(
         JSON.stringify({
           type: TYPE_REGISTER,
           id: globalUser?.uid,
@@ -41,12 +54,6 @@ const Chat = (props: Props) => {
         })
       );
     };
-
-    return () => {
-      ws!.onclose = () => console.log("disconnected");
-    };
-  }, []);
-  if (webSocket) {
     webSocket.onmessage = (msg) => {
       let actualMessage = JSON.parse(msg.data);
       switch (actualMessage.type) {
@@ -59,6 +66,9 @@ const Chat = (props: Props) => {
         default:
           break;
       }
+    };
+    webSocket.onclose = () => {
+      console.log(webSocket, "hello");
     };
   }
   const sendMessage = () => {
@@ -96,7 +106,9 @@ const Chat = (props: Props) => {
               .filter((friend) => friend.uid !== globalUser?.uid)
               .map((friend) => (
                 <li
-                  className="p-4 border border-blue-600 cursor-pointer"
+                  className={`p-4 border border-4 ${
+                    activeChat?.uid === friend.uid ? "border-green-500" : ""
+                  } cursor-pointer`}
                   onClick={() => handleActiveChatChange(friend)}
                 >
                   {friend.displayName}
@@ -111,9 +123,9 @@ const Chat = (props: Props) => {
               {messagesList
                 .filter(
                   (msg) =>
-                    msg.from === activeChat?.uid ||
-                    (globalUser?.uid && msg.to === activeChat?.uid) ||
-                    globalUser?.uid
+                    (msg.from === activeChat?.uid &&
+                      msg.to === globalUser?.uid) ||
+                    (msg.from === globalUser?.uid && msg.to === activeChat?.uid)
                 )
                 .map((msg) => (
                   <div
